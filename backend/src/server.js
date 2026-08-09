@@ -63,6 +63,8 @@ async function route(req, res, options = {}) {
 
   if (method === "OPTIONS") return send(res, 204, "");
 
+  if (pathname === "/ping") return send(res, 200, { status: "ok" });
+
   if (pathname === "/event-types" && method === "GET") {
     return send(res, 200, { items: rules.eventTypes() });
   }
