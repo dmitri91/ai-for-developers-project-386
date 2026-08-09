@@ -1,6 +1,7 @@
 import { Button, Card, Stack, Text, Title } from "@mantine/core";
 import dayjs from "dayjs";
 import type { DayAvailability } from "../api/client";
+import { formatTime } from "../datetime";
 
 interface SlotPickerProps {
   days: DayAvailability[];
@@ -31,7 +32,7 @@ export default function SlotPicker({ days, selectedStartAt, onSelect }: SlotPick
                     variant={active ? "filled" : "default"}
                     onClick={() => onSelect(slot.startAt)}
                   >
-                    {dayjs(slot.startAt).format("HH:mm")}
+                    {formatTime(slot.startAt)}
                   </Button>
                 );
               })}

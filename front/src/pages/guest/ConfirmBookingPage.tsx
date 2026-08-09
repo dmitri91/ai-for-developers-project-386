@@ -14,8 +14,8 @@ import {
   TextInput,
   Title,
 } from "@mantine/core";
-import dayjs from "dayjs";
 import { api, ApiError, type EventType } from "../../api/client";
+import { formatDateLabel, formatDayQuery, formatTime } from "../../datetime";
 
 export default function ConfirmBookingPage() {
   const { eventTypeId } = useParams<{ eventTypeId: string }>();
@@ -65,8 +65,8 @@ export default function ConfirmBookingPage() {
   if (loading) return <Loader mt="xl" />;
   if (error) return <Alert color="red" mt="xl">{error}</Alert>;
 
-  const dateLabel = startAt ? dayjs(startAt).format("dddd, D MMMM") : "";
-  const timeLabel = startAt ? dayjs(startAt).format("HH:mm") : "";
+  const dateLabel = startAt ? formatDateLabel(startAt) : "";
+  const timeLabel = startAt ? formatTime(startAt) : "";
 
   return (
     <Container size="sm" pt="md">
@@ -98,7 +98,7 @@ export default function ConfirmBookingPage() {
               <Group>
                 <Button
                   variant="default"
-                  onClick={() => navigate(`/book/${eventTypeId}`, { state: { date: dayjs(startAt).format("YYYY-MM-DD") } })}
+                  onClick={() => navigate(`/book/${eventTypeId}`, { state: { date: formatDayQuery(startAt) } })}
                 >
                   Назад к слотам
                 </Button>
@@ -124,7 +124,7 @@ export default function ConfirmBookingPage() {
               <Group>
                 <Button
                   variant="default"
-                  onClick={() => navigate(`/book/${eventTypeId}`, { state: { date: dayjs(startAt).format("YYYY-MM-DD") } })}
+                  onClick={() => navigate(`/book/${eventTypeId}`, { state: { date: formatDayQuery(startAt) } })}
                   disabled={submitting}
                 >
                   Назад

@@ -4,6 +4,7 @@ import { Alert, Badge, Button, Card, Container, Divider, Grid, Group, Loader, St
 import { DatePicker } from "@mantine/dates";
 import dayjs from "dayjs";
 import { api, ApiError, type AvailabilityWindow, type EventType, type Slot } from "../../api/client";
+import { formatTime } from "../../datetime";
 
 export default function BookingPage() {
   const { eventTypeId } = useParams<{ eventTypeId: string }>();
@@ -111,7 +112,7 @@ export default function BookingPage() {
                   >
                     <Group justify="space-between" w="100%" wrap="nowrap">
                       <Text fw={600}>
-                        {dayjs(slot.startAt).format("HH:mm")} – {dayjs(slot.endAt).format("HH:mm")}
+                        {formatTime(slot.startAt)} – {formatTime(slot.endAt)}
                       </Text>
                       <Badge color="green" variant="light" size="sm">
                         Свободно

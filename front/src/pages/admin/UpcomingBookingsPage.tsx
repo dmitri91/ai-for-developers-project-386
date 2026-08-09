@@ -15,6 +15,7 @@ import {
 } from "@mantine/core";
 import dayjs from "dayjs";
 import { api, ApiError, type Booking, type EventType } from "../../api/client";
+import { formatDateShort, formatDayQuery, formatTime } from "../../datetime";
 
 const AVATAR_COLORS = ["blue", "grape", "teal", "orange", "indigo", "pink", "cyan"];
 
@@ -62,7 +63,7 @@ export default function UpcomingBookingsPage() {
   const groups: DayGroup[] = useMemo(() => {
     const buckets = new Map<string, Booking[]>();
     for (const b of bookings) {
-      const date = dayjs(b.startAt).format("YYYY-MM-DD");
+      const date = formatDayQuery(b.startAt);
       const arr = buckets.get(date) ?? [];
       arr.push(b);
       buckets.set(date, arr);
@@ -147,7 +148,7 @@ export default function UpcomingBookingsPage() {
                         </div>
                         <Stack gap={2} align="flex-end" ta="right" style={{ flex: "0 0 auto" }}>
                           <Text fw={600} style={{ whiteSpace: "nowrap" }}>
-                            {dayjs(b.startAt).format("HH:mm")} – {dayjs(b.endAt).format("HH:mm")}
+                            {formatTime(b.startAt)} – {formatTime(b.endAt)}
                           </Text>
                           {meta && (
                             <Badge variant="light" color="blue" size="sm">
@@ -155,7 +156,7 @@ export default function UpcomingBookingsPage() {
                             </Badge>
                           )}
                           <Text size="xs" c="dimmed" style={{ whiteSpace: "nowrap" }}>
-                            {dayjs(b.startAt).format("ddd, D MMM")}
+                            {formatDateShort(b.startAt)}
                           </Text>
                         </Stack>
                       </Group>
