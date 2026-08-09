@@ -1,0 +1,16 @@
+.git
+.gitignore
+.DS_Store
+
+node_modules
+front/node_modules
+backend/node_modules
+e2e/node_modules
+
+tsp-output
+dist
+front/dist
+
+e2e
+примеры
+.opencode
