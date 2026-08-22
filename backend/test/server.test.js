@@ -1,5 +1,8 @@
 import test, { describe, before, after } from "node:test";
 import assert from "node:assert/strict";
+import { mkdtempSync, writeFileSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { start } from "../src/server.js";
 
 describe("server.js HTTP routing & handlers", () => {
@@ -76,16 +79,25 @@ describe("server.js HTTP routing & handlers", () => {
 
 describe("server.js static SPA fallback & API route isolation", () => {
   let prodServer;
+  let tempStaticDir;
   const PROD_PORT = 4020;
   const prodBaseUrl = `http://localhost:${PROD_PORT}`;
-  const mockStaticDir = new URL("../../front/dist", import.meta.url).pathname;
 
   before((_, done) => {
-    prodServer = start(PROD_PORT, () => done(), { staticDir: mockStaticDir });
+    tempStaticDir = mkdtempSync(join(tmpdir(), "static-test-"));
+    writeFileSync(join(tempStaticDir, "index.html"), "<!DOCTYPE html><html><body>SPA</body></html>");
+    prodServer = start(PROD_PORT, () => done(), { staticDir: tempStaticDir });
   });
 
   after((_, done) => {
-    prodServer.close(done);
+    prodServer.close(() => {
+      try {
+        rmSync(tempStaticDir, { recursive: true, force: true });
+      } catch {
+        // cleanup
+      }
+      done();
+    });
   });
 
   test("GET неизвестный путь внутри /event-types возвращает 404 JSON, а не index.html (200)", async () => {
