@@ -5,6 +5,7 @@ const WORK_END = 18; // 18:00
 const STEP_MIN = 30; // шаг сетки слотов
 const MS_PER_MIN = 60000;
 const MS_DAY = 86400000;
+const WINDOW_DAYS = 14;
 
 class ApiError extends Error {
   constructor(statusCode, code, message) {
@@ -19,6 +20,11 @@ export { ApiError };
 export const validationError = (message) => new ApiError(400, "VALIDATION_ERROR", message);
 export const notFoundError = (message) => new ApiError(404, "NOT_FOUND", message);
 export const conflictError = (message) => new ApiError(409, "SLOT_OCCUPIED", message);
+
+const getTodayUtc = () => {
+  const d = new Date();
+  return new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()));
+};
 
 const isoUtc = (dateStr, hour, minute = 0) =>
   new Date(
@@ -48,9 +54,16 @@ export function availabilityWindow(eventTypeId, fromValue, toValue) {
   if (!from || !to) throw validationError("Параметры from и to должны быть датами вида ГГГГ-ММ-ДД");
   if (from > to) throw validationError("from должно быть не позже to");
 
+  const today = getTodayUtc();
+  const maxDate = new Date(today.getTime() + (WINDOW_DAYS - 1) * MS_DAY);
+  if (from < today || to > maxDate) {
+    throw validationError("Окно доступности должно быть в пределах 14 дней от текущей даты");
+  }
+
   const durationMs = eventType.duration * MS_PER_MIN;
   const bookings = store.listBookings();
   const days = [];
+  const now = Date.now();
   let cur = new Date(from.getTime());
 
   while (cur <= to) {
@@ -64,6 +77,7 @@ export function availabilityWindow(eventTypeId, fromValue, toValue) {
       for (let m = 0; m < 60; m += STEP_MIN) {
         const startAt = isoUtc(dateStr, h, m);
         const s = Date.parse(startAt);
+        if (s <= now) continue;
         const e = s + durationMs;
         const occupied = busy.some((interval) => overlaps([s, e], interval));
         if (!occupied) slots.push({ startAt, endAt: new Date(e).toISOString() });
@@ -76,7 +90,10 @@ export function availabilityWindow(eventTypeId, fromValue, toValue) {
   return { eventTypeId, from: fromValue, to: toValue, days };
 }
 
-export function createBooking({ eventTypeId, guestName, startAt }) {
+export function createBooking({ eventTypeId, guestName, startAt } = {}) {
+  if (typeof eventTypeId !== "string" || !eventTypeId.trim())
+    throw validationError("eventTypeId обязателен");
+
   const eventType = store.findEventType(eventTypeId);
   if (!eventType) throw notFoundError("Тип события не найден");
 
@@ -86,7 +103,17 @@ export function createBooking({ eventTypeId, guestName, startAt }) {
   const start = Date.parse(startAt);
   if (!Number.isFinite(start)) throw validationError("Некорректный startAt");
 
+  const now = Date.now();
+  if (start <= now) throw validationError("Нельзя забронировать слот в прошлом");
+
   const startDate = new Date(start);
+  const today = getTodayUtc();
+  const maxDate = new Date(today.getTime() + (WINDOW_DAYS - 1) * MS_DAY);
+  const bookingDay = new Date(Date.UTC(startDate.getUTCFullYear(), startDate.getUTCMonth(), startDate.getUTCDate()));
+  if (bookingDay > maxDate) {
+    throw validationError("Слот выходит за пределы 14-дневного окна бронирования");
+  }
+
   const h = startDate.getUTCHours();
   const m = startDate.getUTCMinutes();
   const end = start + eventType.duration * MS_PER_MIN;
@@ -115,7 +142,7 @@ export function pendingBookings() {
 
 export const eventTypes = () => store.listEventTypes();
 
-export function createEventType({ name, description, duration }) {
+export function createEventType({ name, description, duration } = {}) {
   if (typeof name !== "string" || !name.trim()) throw validationError("name обязателен");
   if (!Number.isInteger(duration) || duration < 1)
     throw validationError("duration должно быть целым числом >= 1");

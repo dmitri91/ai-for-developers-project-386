@@ -5,12 +5,18 @@ const PORT = Number(process.env.PORT ?? 4010);
 const WORK_START = 9; // 09:00
 const WORK_END = 18; // 18:00
 const STEP_MIN = 30; // слот каждые 30 минут
+const WINDOW_DAYS = 14;
 
 const eventTypes = [
   { id: "evt-15", name: "Встреча 15 минут", description: "Короткий тип события для быстрого слота.", duration: 15 },
   { id: "evt-30", name: "Встреча 30 минут", description: "Базовый тип события для бронирования.", duration: 30 },
 ];
 const bookings = [];
+
+const getTodayUtc = () => {
+  const d = new Date();
+  return new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()));
+};
 
 const now = () => new Date().toISOString();
 const isoUtc = (dateStr, hour, minute) =>
@@ -25,16 +31,23 @@ const isoUtc = (dateStr, hour, minute) =>
   ).toISOString();
 
 function readBody(req) {
-  return new Promise((resolve) => {
+  return new Promise((resolve, reject) => {
     let data = "";
     req.on("data", (c) => (data += c));
     req.on("end", () => {
+      if (!data.trim()) return resolve({});
       try {
-        resolve(JSON.parse(data || "{}"));
-      } catch {
-        resolve({});
+        const parsed = JSON.parse(data);
+        if (typeof parsed !== "object" || parsed === null) {
+          return reject({ statusCode: 400, code: "VALIDATION_ERROR", message: "Тело запроса должно быть JSON-объектом" });
+        }
+        resolve(parsed);
+      } catch (err) {
+        if (err?.code === "VALIDATION_ERROR") return reject(err);
+        reject({ statusCode: 400, code: "VALIDATION_ERROR", message: "Некорректный JSON в теле запроса" });
       }
     });
+    req.on("error", (err) => reject({ statusCode: 400, code: "VALIDATION_ERROR", message: err.message }));
   });
 }
 
@@ -49,6 +62,7 @@ function availability(eventTypeId, from, to) {
   const days = [];
   let cur = new Date(`${from}T00:00:00Z`);
   const end = new Date(`${to}T00:00:00Z`);
+  const currentTimestamp = Date.now();
 
   while (cur <= end) {
     const dateStr = cur.toISOString().slice(0, 10);
@@ -60,8 +74,9 @@ function availability(eventTypeId, from, to) {
     for (let h = WORK_START; h < WORK_END; h++) {
       for (let m = 0; m < 60; m += STEP_MIN) {
         const startAt = isoUtc(dateStr, h, m);
-        const endAt = new Date(Date.parse(startAt) + durationMs).toISOString();
         const s = Date.parse(startAt);
+        if (s <= currentTimestamp) continue;
+        const endAt = new Date(s + durationMs).toISOString();
         const e = Date.parse(endAt);
         const occupied = busy.some(([bs, be]) => s < be && bs < e);
         if (!occupied) slots.push({ startAt, endAt });
@@ -84,8 +99,20 @@ async function route(req, res) {
     if (!b.startAt || !b.guestName?.trim())
       return send(res, 400, { code: "VALIDATION_ERROR", message: "Нужны startAt и guestName" });
 
-    const endAt = new Date(Date.parse(b.startAt) + type.duration * 60000).toISOString();
     const a = Date.parse(b.startAt);
+    if (!Number.isFinite(a)) return send(res, 400, { code: "VALIDATION_ERROR", message: "Некорректный startAt" });
+
+    if (a <= Date.now()) return send(res, 400, { code: "VALIDATION_ERROR", message: "Нельзя забронировать слот в прошлом" });
+
+    const startDate = new Date(a);
+    const today = getTodayUtc();
+    const maxDate = new Date(today.getTime() + (WINDOW_DAYS - 1) * 86400000);
+    const bookingDay = new Date(Date.UTC(startDate.getUTCFullYear(), startDate.getUTCMonth(), startDate.getUTCDate()));
+    if (bookingDay > maxDate) {
+      return send(res, 400, { code: "VALIDATION_ERROR", message: "Слот выходит за пределы 14-дневного окна бронирования" });
+    }
+
+    const endAt = new Date(a + type.duration * 60000).toISOString();
     const z = Date.parse(endAt);
     const taken = bookings.some((bk) => a < Date.parse(bk.endAt) && Date.parse(bk.startAt) < z);
     if (taken) return send(res, 409, { code: "SLOT_OCCUPIED", message: "Слот уже занят" });
@@ -109,6 +136,21 @@ async function route(req, res) {
     if (!from || !to) return send(res, 400, { code: "VALIDATION_ERROR", message: "Нужны from и to" });
     if (!eventTypes.find((t) => t.id === availMatch[1]))
       return send(res, 404, { code: "NOT_FOUND", message: "Тип события не найден" });
+
+    const fromDate = new Date(`${from}T00:00:00Z`);
+    const toDate = new Date(`${to}T00:00:00Z`);
+    if (Number.isNaN(fromDate.getTime()) || Number.isNaN(toDate.getTime())) {
+      return send(res, 400, { code: "VALIDATION_ERROR", message: "Параметры from и to должны быть датами вида ГГГГ-ММ-ДД" });
+    }
+    if (fromDate > toDate) {
+      return send(res, 400, { code: "VALIDATION_ERROR", message: "from должно быть не позже to" });
+    }
+    const today = getTodayUtc();
+    const maxDate = new Date(today.getTime() + (WINDOW_DAYS - 1) * 86400000);
+    if (fromDate < today || toDate > maxDate) {
+      return send(res, 400, { code: "VALIDATION_ERROR", message: "Окно доступности должно быть в пределах 14 дней от текущей даты" });
+    }
+
     return send(res, 200, availability(availMatch[1], from, to));
   }
 
@@ -140,7 +182,12 @@ async function route(req, res) {
 }
 
 createServer((req, res) => {
-  route(req, res).catch((err) => send(res, 500, { code: "ERROR", message: String((err && err.message) || err) }));
+  route(req, res).catch((err) => {
+    const status = err?.statusCode ?? 500;
+    const code = err?.code ?? "ERROR";
+    const message = String(err?.message || err);
+    send(res, status, { code, message });
+  });
 }).listen(PORT, () => {
   console.log(`Calendar mock API running on http://localhost:${PORT}`);
 });

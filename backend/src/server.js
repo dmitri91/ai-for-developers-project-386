@@ -27,16 +27,23 @@ const CORS_HEADERS = {
 };
 
 async function readBody(req) {
-  return new Promise((resolve) => {
+  return new Promise((resolve, reject) => {
     let data = "";
     req.on("data", (chunk) => (data += chunk));
     req.on("end", () => {
+      if (!data.trim()) return resolve({});
       try {
-        resolve(JSON.parse(data || "{}"));
-      } catch {
-        resolve({});
+        const parsed = JSON.parse(data);
+        if (typeof parsed !== "object" || parsed === null) {
+          return reject(rules.validationError("Тело запроса должно быть JSON-объектом"));
+        }
+        resolve(parsed);
+      } catch (err) {
+        if (err instanceof rules.ApiError) return reject(err);
+        reject(rules.validationError("Некорректный JSON в теле запроса"));
       }
     });
+    req.on("error", (err) => reject(rules.validationError(err.message)));
   });
 }
 
@@ -93,6 +100,18 @@ async function route(req, res, options = {}) {
 
   if (pathname === "/admin/bookings/upcoming" && method === "GET") {
     return send(res, 200, { items: rules.pendingBookings() });
+  }
+
+  const isApiRoute =
+    pathname === "/ping" ||
+    pathname.startsWith("/event-types") ||
+    pathname.startsWith("/bookings") ||
+    pathname.startsWith("/admin/event-types") ||
+    pathname.startsWith("/admin/bookings/upcoming") ||
+    pathname.startsWith("/api/");
+
+  if (isApiRoute) {
+    throw new rules.ApiError(404, "NOT_FOUND", "Неизвестный маршрут");
   }
 
   if (options.staticDir) {
