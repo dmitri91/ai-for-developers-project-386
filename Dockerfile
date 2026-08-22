@@ -14,9 +14,7 @@ RUN npx tsp compile .
 
 WORKDIR /app/front
 COPY front/package.json front/package-lock.json ./
-# Лок-файл рассинхронизирован с peer-зависимостями openapi-typescript (TS 6) —
-# ставим зависимости без строгой проверки peer-ов, как и в локальной разработке.
-RUN sed -i 's#https://artifactory.mts.ai/artifactory/api/npm/common-npm-group/#https://registry.npmjs.org/#g' package-lock.json && npm ci --legacy-peer-deps
+RUN sed -i 's#https://artifactory.mts.ai/artifactory/api/npm/common-npm-group/#https://registry.npmjs.org/#g' package-lock.json && npm ci
 
 COPY front/ ./
 RUN npm run generate:api && npm run build
