@@ -6,15 +6,14 @@ ENV npm_config_registry=https://registry.npmjs.org/
 WORKDIR /app
 
 COPY package.json package-lock.json ./
-# Лок-файлы сгенерированы с корпоративным реестром — переписываем его хостав публичный npmjs.
-RUN sed -i 's#https://artifactory.mts.ai/artifactory/api/npm/common-npm-group/#https://registry.npmjs.org/#g' package-lock.json && npm ci
+RUN npm ci
 
 COPY main.tsp tspconfig.yaml ./
 RUN npx tsp compile .
 
 WORKDIR /app/front
 COPY front/package.json front/package-lock.json ./
-RUN sed -i 's#https://artifactory.mts.ai/artifactory/api/npm/common-npm-group/#https://registry.npmjs.org/#g' package-lock.json && npm ci
+RUN npm ci
 
 COPY front/ ./
 RUN npm run generate:api && npm run build
