@@ -93,3 +93,17 @@ test("S11: длительность разных типов событий в UI
   await openBookingOnToday(page, "evt-30");
   await expect(page.getByText("30 мин", { exact: true }).first()).toBeVisible();
 });
+
+test("S13: невалидный JSON в теле запроса возвращает 400 VALIDATION_ERROR", async ({ request }) => {
+  const res = await request.post("http://localhost:4010/bookings", {
+    data: Buffer.from("{ invalid json"),
+    headers: { "Content-Type": "application/json" },
+  });
+  expect(res.status()).toBe(400);
+  const body = await res.json();
+  expect(body.code).toBe("VALIDATION_ERROR");
+  expect(body.message).toContain("JSON");
+
+  const ping = await request.get("http://localhost:4010/ping");
+  expect(ping.status()).toBe(200);
+});

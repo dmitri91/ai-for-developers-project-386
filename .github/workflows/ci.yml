@@ -18,6 +18,11 @@ jobs:
           node-version: 22
           cache: npm
 
+      - name: Run backend tests
+        working-directory: backend
+        run: |
+          npm test
+
       - name: Install & verify frontend
         working-directory: front
         run: |
